@@ -3,14 +3,15 @@ import dotenv from 'dotenv'
 import express from 'express'
 import cors from 'cors'
 import connect from './db'
-import mongo from 'mongodb'
+import mongo, { CommandCursor } from 'mongodb'
 import auth from './auth'
+import db from './db'
 const app = express()
 const port = 3000
 
 app.use(cors())
 app.use(express.json())
-
+//sve recepti i search
 app.get('/', async (req, res) => {
   let db = await connect()
   let query = req.query
@@ -23,6 +24,7 @@ app.get('/', async (req, res) => {
   console.log(querySearch)
   res.json(results)
 })
+//jedan recept
 app.get('/recepti/:id', async (req, res) => {
   let id = req.params.id
   let db = await connect()
@@ -31,16 +33,15 @@ app.get('/recepti/:id', async (req, res) => {
   console.log(doc)
   res.json(doc)
 })
-
-app.get('/profil/:id', async (req, res) => {
-  let id = req.params.id
+app.get('/userdata/:username', async (req, res) => {
+  let username = req.params.username
   let db = await connect()
 
-  let doc = await db.collection('Recepti').findOne({ _id: mongo.ObjectId(id) })
+  let doc = await db.collection('users').findOne({ username: username })
   console.log(doc)
   res.json(doc)
 })
-
+//recepti za profil koji je napravio te recepte
 app.get('/useracc/:id', async (req, res) => {
   let id = req.params.id
   console.log('Request IP: ' + req.ip)
@@ -92,7 +93,11 @@ app.post('/', [auth.verify], async (req, res) => {
   delete data._id
   let result = await db.collection('Recepti').insertOne(data)
   console.log('ovo je id ', data._id)
+  let kom = await db
+    .collection('Komentari')
+    .insertOne({ recipeID: data._id, komentari: [] })
   console.log('ovo je rezsutl', result)
+  console.log(kom)
   if (result.insertedCount == 1) {
     await db.collection('users').findOne()
     res.json({
@@ -105,6 +110,7 @@ app.post('/', [auth.verify], async (req, res) => {
     })
   }
 })
+//ocjena recepta
 app.patch('/recepti/:id', async (req, res) => {
   let db = await connect()
   let id = req.params.id
@@ -119,6 +125,7 @@ app.patch('/recepti/:id', async (req, res) => {
     )
   res.json(result)
 })
+//provmjena profila lozinka..etc
 app.patch('/useracc', [auth.verify], async (req, res) => {
   let changes = req.body
   let username = req.jwt._id
@@ -134,7 +141,7 @@ app.patch('/useracc', [auth.verify], async (req, res) => {
     res.status(400).json({ error: 'krivi upit' })
   }
 })
-
+//jwt
 app.get('/useracc', [auth.verify], (req, res) => {
   let userDetails = req.jwt
   res.send(userDetails)
@@ -142,22 +149,33 @@ app.get('/useracc', [auth.verify], (req, res) => {
   app.get('/tajna', [auth.verify], (req, res) => {
     res.json({ message: 'ovo je tajna' + req.jwt.username })
   })
-
+//update recepta
 app.patch('/profil/:id', async (req, res) => {
+  let db = await connect()
   console.log('pocetak')
   let id = req.params.id
   let data = req.body
-  data.time = new Date().getTime()
-  delete data._id
-  let db = await connect()
-  let result = await db
-    .collection('Recepti')
-    .replaceOne({ _id: mongo.ObjectId(id) }, data)
-  res.json('uspio')
+  console.log(data)
+  let result = await db.collection('Recepti').updateOne(
+    { _id: mongo.ObjectId(id) },
+    {
+      $set: {
+        naziv: data.naziv,
+        kategorije: data.kategorije,
+        src: data.src,
+        prepTime: data.prepTime,
+        cookTime: data.cookTime,
+        sastojci: data.sastojci,
+        steps: data.steps,
+      },
+    }
+  )
+  res.json(result)
 })
 app.listen(port, () => {
   console.log(`slusam na portu ${port}`)
 })
+//brisanje recepta op id
 app.delete('/recept/:id', async (req, res) => {
   let id = req.params.id
   let db = await connect()
@@ -166,6 +184,7 @@ app.delete('/recept/:id', async (req, res) => {
     .deleteOne({ _id: mongo.ObjectId(id) })
   res.json('uspio')
 })
+//sortiranje po receptu
 app.get('/kategorije', async (req, res) => {
   let db = await connect()
   let query = req.query
@@ -198,24 +217,91 @@ app.get('/kategorije', async (req, res) => {
   let rez = await doc.toArray()
   res.json(rez)
 })
-/* app.post("/recepti", (req, res) => {
-  res.json(data.recepti);
-});
-//update
-app.put("/recepti/:id", (req, res) => {});
+//ref za favorite recepte i korisnika
+app.patch('/favoriti/:id', async (req, res) => {
+  console.log(typeof req.params.id)
+  let data = req.body
+  console.log(data)
+  console.log(mongo.ObjectId(data.id))
 
-//
-app.delete("/recepti/:id", (req, res) => {});
+  let userID = data.id
+  let db = await connect()
+  let user = await db.collection('users')
+  let answere = await db
+    .collection('Favoriti')
+    .findOneAndUpdate(
+      { userId: data.id },
+      { $push: { favoriteRecipes: req.params.id } },
+      { returnNewDocument: true }
+    )
+  console.log('ovo je vali2 ' + answere.value._id)
+  user.findOneAndUpdate(
+    { _id: mongo.ObjectId(userID) },
+    {
+      $push: {
+        Favorites: answere.value._id,
+      },
+    },
+    { returnNewDocument: true }
+  )
+  res.json(answere)
+})
 
-// jedan recept
-app.get("/recepti/:id", (req, res) => {});
+//dodavanje komentara
+app.patch('/local/:id', async (req, res) => {
+  let db = await connect()
+  let id = req.params.id
+  let data = req.body
+  console.log(data)
+  let rez = await db
+    .collection('Komentari')
+    .findOneAndUpdate(
+      { recipeID: mongo.ObjectId(id) },
+      { $push: { komentari: data } },
+      { returnNewDocument: true }
+    )
+  res.json(rez)
+})
+//komentari za recept
+app.get('/komentari/:id', async (req, res) => {
+  let db = await connect()
+  let id = req.params.id
+  let rez = await db
+    .collection('Komentari')
+    .findOne({ recipeID: mongo.ObjectId(id) })
+  console.log(rez)
+  res.json(rez)
+})
+//favoriti
+app.get('/savedRecipe/:id', async (req, res) => {
+  let db = await connect()
+  let data = await db
+    .collection('users')
+    .findOne({ _id: mongo.ObjectId(req.params.id) })
+  console.log(data.Favorites)
+  let rez = await db
+    .collection('Favoriti')
+    .findOne({ _id: mongo.ObjectId(data.Favorites[0]) })
+  let saved = [...rez.favoriteRecipes]
 
-app.get("/", (req, res) => {});
-app.get("/kategorije", (req, res) => {
-  json(data.kategorije);
-});
-app.get("/kategorija/:id", (req, res) => {});
-app.use("/recepti", (req, res) => {});
-app.get("/korisnik", (req, res) => {
-  res.json(data.korisnik);
-}); */
+  console.log(saved)
+  const savedRecipes = await Promise.all(
+    saved.map(async (recipe) => {
+      return await db
+        .collection('Recepti')
+        .find({ _id: mongo.ObjectId(recipe) })
+        .toArray()
+    })
+  )
+
+  /*  if (req.query.mealType) {
+    res.send(
+      savedRecipes
+        .filter((recipe) => recipe.meal_type == req.query.mealType)
+        .slice(0, 10)
+    )
+    
+  } */
+  console.log(savedRecipes[1])
+  res.send(savedRecipes)
+})
