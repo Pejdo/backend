@@ -314,17 +314,14 @@ app.patch('/recepti/removeFavorit/:id', async (req, res) => {
       { $pull: { favoriteRecipes: req.params.id } }
     )
 
-  res.status(204).json({
-    status: 'success',
-    data: null,
-  })
+  res.json(favoriti)
 })
 //ocjena recepta
 app.patch('/recepti/:id', async (req, res) => {
   let db = await connect()
   let id = req.params.id
   let data = req.body
-  console.log(data.rating)
+  console.log(data)
   let result = await db
     .collection('Recepti')
     .findOneAndUpdate(
@@ -332,5 +329,111 @@ app.patch('/recepti/:id', async (req, res) => {
       { $push: { rating: data.rating } },
       { returnNewDocument: true }
     )
-  res.json(result)
+  let rated = await db.collection('Rated').findOneAndUpdate(
+    {
+      userId: mongo.ObjectId(data.userId),
+    },
+    { $push: { ratedRecipes: { recipe: id, rating: data.rating } } }
+  )
+  console.log(rated)
+  res.json(rated)
+})
+// za remove ocijene
+app.patch('/recepti/:id/remove', async (req, res) => {
+  let db = await connect()
+  let id = req.params.id
+  let data = req.body
+  console.log(data)
+  let result = await db
+    .collection('Recepti')
+    .findOneAndUpdate(
+      { _id: mongo.ObjectId(id) },
+      { $pull: { rating: data.rating } }
+    )
+  let rated = await db.collection('Rated').findOneAndUpdate(
+    {
+      userId: mongo.ObjectId(data.userId),
+    },
+    { $pull: { ratedRecipes: { recipe: id, rating: data.rating } } }
+  )
+  console.log(rated)
+  res.json(rated)
+})
+// za favorite
+app.get('/ratedRecipe/:id', async (req, res) => {
+  let db = await connect()
+  let data = await db
+    .collection('users')
+    .findOne({ _id: mongo.ObjectId(req.params.id) })
+  if (data.Favorites.length) {
+    console.log('favorit', data.Favorites)
+    let rez = await db
+      .collection('Favoriti')
+      .findOne({ _id: mongo.ObjectId(data.Favorites[0]) })
+    let saved = [...rez.favoriteRecipes]
+
+    console.log(saved)
+    const savedRecipes = await Promise.all(
+      saved.map(async (recipe) => {
+        let k = await db
+          .collection('Recepti')
+          .find({ _id: mongo.ObjectId(recipe) })
+          .toArray()
+        if (k[0].rating.length)
+          k[0].rating =
+            k[0].rating.reduce((sum, value) => {
+              return (sum += value)
+            }) / k[0].rating.length
+        return k
+      })
+    )
+    res.send(savedRecipes)
+  } else res.json({ nema: 'nema favorita' })
+})
+// jedan rejtani
+app.get('/recepti/:id/get', async (req, res) => {
+  let db = await connect()
+  let id = req.params.id
+  let data = req.body
+  console.log(data)
+  /*  let result = await db
+    .collection('Recepti')
+    .findOneAndUpdate(
+      { _id: mongo.ObjectId(id) },
+      { $pull: { rating: data.rating } }
+    ) */
+  let rated = await db.collection('Rated').findOne({
+    userId: mongo.ObjectId(data.userId),
+    ratedRecipes: { $elemMatch: { recipe: id, rating: data.rating } },
+  })
+  console.log(rated)
+  res.json(rated)
+})
+app.get('/recepti/:id/getall', async (req, res) => {
+  let db = await connect()
+  let id = req.params.id
+  let data = req.body
+  console.log(data)
+  let rated = await db.collection('Rated').findOne({
+    userId: mongo.ObjectId(data.userId),
+  })
+  console.log(rated.ratedRecipes)
+  let saved = rated.ratedRecipes
+  if (saved.length) {
+    const savedRecipes = await Promise.all(
+      saved.map(async (recipe) => {
+        let k = await db
+          .collection('Recepti')
+          .find({ _id: mongo.ObjectId(recipe.recipe) })
+          .toArray()
+        if (k[0].rating.length)
+          k[0].rating =
+            k[0].rating.reduce((sum, value) => {
+              return (sum += value)
+            }) / k[0].rating.length
+        return k
+      })
+    )
+    res.send(savedRecipes)
+  } else res.json({ nema: 'nema favorita' })
 })

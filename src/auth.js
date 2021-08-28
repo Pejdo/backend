@@ -27,6 +27,9 @@ export default {
         await db
           .collection('Favoriti')
           .insertOne({ userId: result.insertedId, favoriteRecipes: [] })
+        await db
+          .collection('Rated')
+          .insertOne({ userId: result.insertedId, ratedRecipes: [] })
         return userData
       }
     } catch (e) {
