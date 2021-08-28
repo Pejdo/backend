@@ -20,7 +20,14 @@ app.get('/', async (req, res) => {
 
   let cursor = await db.collection('Recepti').find(querySearch)
   let results = await cursor.toArray()
-  console.log(results)
+  results.forEach((value) => {
+    console.log(value.rating)
+    if (value.rating.length)
+      value.rating =
+        value.rating.reduce((sum, index) => {
+          return (sum += index)
+        }) / value.rating.length
+  })
   console.log(querySearch)
   res.json(results)
 })
@@ -30,7 +37,9 @@ app.get('/recepti/:id', async (req, res) => {
   let db = await connect()
 
   let doc = await db.collection('Recepti').findOne({ _id: mongo.ObjectId(id) })
-  console.log(doc)
+  if (doc.rating.length)
+    doc.rating =
+      doc.rating.reduce((sum, index) => (sum += index)) / doc.rating.length
   res.json(doc)
 })
 app.get('/userdata/:username', async (req, res) => {
@@ -38,21 +47,24 @@ app.get('/userdata/:username', async (req, res) => {
   let db = await connect()
 
   let doc = await db.collection('users').findOne({ username: username })
+
   console.log(doc)
   res.json(doc)
 })
 //recepti za profil koji je napravio te recepte
 app.get('/useracc/:id', async (req, res) => {
   let id = req.params.id
-  console.log('Request IP: ' + req.ip)
-  console.log('Request Method: ' + req.method)
-  console.log('Request date: ' + new Date())
-  console.log('id ' + id)
-
   let db = await connect()
-
   let cursor = await db.collection('Recepti').find({ username: id })
   let results = await cursor.toArray()
+  results.forEach((value) => {
+    console.log(value.rating)
+    if (value.rating.length)
+      value.rating =
+        value.rating.reduce((sum, index) => {
+          return (sum += index)
+        }) / value.rating.length
+  })
   console.log(results)
   res.json(results)
 })
@@ -110,21 +122,7 @@ app.post('/', [auth.verify], async (req, res) => {
     })
   }
 })
-//ocjena recepta
-app.patch('/recepti/:id', async (req, res) => {
-  let db = await connect()
-  let id = req.params.id
-  let data = req.body
-  console.log(data.rating)
-  let result = await db
-    .collection('Recepti')
-    .findOneAndUpdate(
-      { _id: mongo.ObjectId(id) },
-      { $push: { rating: data.rating } },
-      { returnNewDocument: true }
-    )
-  res.json(result)
-})
+
 //provmjena profila lozinka..etc
 app.patch('/useracc', [auth.verify], async (req, res) => {
   let changes = req.body
@@ -219,7 +217,7 @@ app.get('/kategorije', async (req, res) => {
 })
 //ref za favorite recepte i korisnika
 app.patch('/favoriti/:id', async (req, res) => {
-  console.log(typeof req.params.id)
+  console.log(req.params.id)
   let data = req.body
   console.log(data)
   console.log(mongo.ObjectId(data.id))
@@ -230,7 +228,7 @@ app.patch('/favoriti/:id', async (req, res) => {
   let answere = await db
     .collection('Favoriti')
     .findOneAndUpdate(
-      { userId: data.id },
+      { userId: mongo.ObjectId(data.id) },
       { $push: { favoriteRecipes: req.params.id } },
       { returnNewDocument: true }
     )
@@ -269,39 +267,70 @@ app.get('/komentari/:id', async (req, res) => {
   let rez = await db
     .collection('Komentari')
     .findOne({ recipeID: mongo.ObjectId(id) })
-  console.log(rez)
+  if (rez === null) {
+    res.json({ err: 'no comment ' })
+  }
   res.json(rez)
 })
+
 //favoriti
 app.get('/savedRecipe/:id', async (req, res) => {
   let db = await connect()
   let data = await db
     .collection('users')
     .findOne({ _id: mongo.ObjectId(req.params.id) })
-  console.log(data.Favorites)
-  let rez = await db
-    .collection('Favoriti')
-    .findOne({ _id: mongo.ObjectId(data.Favorites[0]) })
-  let saved = [...rez.favoriteRecipes]
+  if (data.Favorites.length) {
+    console.log('favorit', data.Favorites)
+    let rez = await db
+      .collection('Favoriti')
+      .findOne({ _id: mongo.ObjectId(data.Favorites[0]) })
+    let saved = [...rez.favoriteRecipes]
 
-  console.log(saved)
-  const savedRecipes = await Promise.all(
-    saved.map(async (recipe) => {
-      return await db
-        .collection('Recepti')
-        .find({ _id: mongo.ObjectId(recipe) })
-        .toArray()
-    })
-  )
-
-  /*  if (req.query.mealType) {
-    res.send(
-      savedRecipes
-        .filter((recipe) => recipe.meal_type == req.query.mealType)
-        .slice(0, 10)
+    console.log(saved)
+    const savedRecipes = await Promise.all(
+      saved.map(async (recipe) => {
+        let k = await db
+          .collection('Recepti')
+          .find({ _id: mongo.ObjectId(recipe) })
+          .toArray()
+        if (k[0].rating.length)
+          k[0].rating =
+            k[0].rating.reduce((sum, value) => {
+              return (sum += value)
+            }) / k[0].rating.length
+        return k
+      })
     )
-    
-  } */
-  console.log(savedRecipes[1])
-  res.send(savedRecipes)
+    res.send(savedRecipes)
+  } else res.json({ nema: 'nema favorita' })
+})
+app.patch('/recepti/removeFavorit/:id', async (req, res) => {
+  let db = await connect()
+  console.log(req.body, req.params.id)
+  const favoriti = await db
+    .collection('Favoriti')
+    .updateOne(
+      { userId: mongo.ObjectId(req.body.id) },
+      { $pull: { favoriteRecipes: req.params.id } }
+    )
+
+  res.status(204).json({
+    status: 'success',
+    data: null,
+  })
+})
+//ocjena recepta
+app.patch('/recepti/:id', async (req, res) => {
+  let db = await connect()
+  let id = req.params.id
+  let data = req.body
+  console.log(data.rating)
+  let result = await db
+    .collection('Recepti')
+    .findOneAndUpdate(
+      { _id: mongo.ObjectId(id) },
+      { $push: { rating: data.rating } },
+      { returnNewDocument: true }
+    )
+  res.json(result)
 })
