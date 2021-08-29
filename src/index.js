@@ -174,7 +174,7 @@ app.listen(port, () => {
   console.log(`slusam na portu ${port}`)
 })
 //brisanje recepta op id
-app.delete('/recept/:id', async (req, res) => {
+app.delete('/recept/:id', [auth.verify], async (req, res) => {
   let id = req.params.id
   let db = await connect()
   let result = await db
@@ -238,7 +238,7 @@ app.get('/kategorije', async (req, res) => {
   res.json(rez)
 })
 //ref za favorite recepte i korisnika
-app.patch('/favoriti/:id', async (req, res) => {
+app.patch('/favoriti/:id', [auth.verify], async (req, res) => {
   console.log(req.params.id)
   let data = req.body
   console.log(data)
@@ -259,7 +259,7 @@ app.patch('/favoriti/:id', async (req, res) => {
 })
 
 //dodavanje komentara
-app.patch('/local/:id', async (req, res) => {
+app.patch('/local/:id', [auth.verify], async (req, res) => {
   let db = await connect()
   let id = req.params.id
   let data = req.body
@@ -287,7 +287,7 @@ app.get('/komentari/:id', async (req, res) => {
 })
 
 //favoriti
-app.get('/savedRecipe/:id', async (req, res) => {
+app.get('/savedRecipe/:id', [auth.verify], async (req, res) => {
   let db = await connect()
   /*  let data = await db
     .collection('users')
@@ -317,7 +317,7 @@ app.get('/savedRecipe/:id', async (req, res) => {
     res.send(savedRecipes)
   } else res.json({ nema: 'nema favorita' })
 })
-app.patch('/recepti/removeFavorit/:id', async (req, res) => {
+app.patch('/recepti/removeFavorit/:id', [auth.verify], async (req, res) => {
   let db = await connect()
   console.log(req.body, req.params.id)
   const favoriti = await db
@@ -331,7 +331,7 @@ app.patch('/recepti/removeFavorit/:id', async (req, res) => {
 })
 
 // za favorite
-app.get('/ratedRecipe/:id', async (req, res) => {
+app.get('/ratedRecipe/:id', [auth.verify], async (req, res) => {
   let db = await connect()
   let data = await db
     .collection('users')
@@ -363,7 +363,7 @@ app.get('/ratedRecipe/:id', async (req, res) => {
 })
 
 //ocjena recepta
-app.patch('/recepti/:id', async (req, res) => {
+app.patch('/recepti/:id', [auth.verify], async (req, res) => {
   let db = await connect()
   let id = req.params.id
   let data = req.body
@@ -406,7 +406,7 @@ app.get('/recepti/:id/get', async (req, res) => {
 })
 
 // svi rejatni recepti
-app.get('/recepti/:id/getall', async (req, res) => {
+app.get('/recepti/:id/getall', [auth.verify], async (req, res) => {
   let db = await connect()
   let id = req.params.id
   console.log(id)
@@ -439,7 +439,7 @@ app.get('/recepti/:id/getall', async (req, res) => {
 })
 
 // za remove ocijene
-app.patch('/recepti/:id/remove', async (req, res) => {
+app.patch('/recepti/:id/remove', [auth.verify], async (req, res) => {
   let db = await connect()
   let id = req.params.id
   let data = req.body
@@ -460,7 +460,7 @@ app.patch('/recepti/:id/remove', async (req, res) => {
   res.json(rated)
 })
 // zamjena rejtinga
-app.patch('/recepti/:id/change', async (req, res) => {
+app.patch('/recepti/:id/change', [auth.verify], async (req, res) => {
   let db = await connect()
   let id = req.params.id
   let data = req.body
