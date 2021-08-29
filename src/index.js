@@ -206,14 +206,16 @@ app.delete('/recept/:id', async (req, res) => {
 app.get('/kategorije', async (req, res) => {
   let db = await connect()
   let query = req.query
+  console.log(query)
   let selekcije = {}
   if (query._any) {
     // za upit: /posts?_all=pojam1 pojam2
     let pretraga = query._any
+    console.log(pretraga)
     let terms = pretraga.split(' ')
 
-    let atributi = ['sastojci', 'cookTime']
-
+    /* let atributi = ['sastojci', 'cookTime'] */
+    let atributi = ['kategorije']
     selekcije = {
       $and: [],
     }
@@ -253,15 +255,6 @@ app.patch('/favoriti/:id', async (req, res) => {
       { returnNewDocument: true }
     )
   console.log('ovo je vali2 ' + answere.value._id)
-  user.findOneAndUpdate(
-    { _id: mongo.ObjectId(userID) },
-    {
-      $push: {
-        Favorites: answere.value._id,
-      },
-    },
-    { returnNewDocument: true }
-  )
   res.json(answere)
 })
 
@@ -296,16 +289,15 @@ app.get('/komentari/:id', async (req, res) => {
 //favoriti
 app.get('/savedRecipe/:id', async (req, res) => {
   let db = await connect()
-  let data = await db
+  /*  let data = await db
     .collection('users')
-    .findOne({ _id: mongo.ObjectId(req.params.id) })
-  if (data.Favorites.length) {
-    console.log('favorit', data.Favorites)
-    let rez = await db
-      .collection('Favoriti')
-      .findOne({ _id: mongo.ObjectId(data.Favorites[0]) })
-    let saved = [...rez.favoriteRecipes]
-
+    .findOne({ _id: mongo.ObjectId(req.params.id) }) */
+  let rez = await db
+    .collection('Favoriti')
+    .findOne({ userId: mongo.ObjectId(req.params.id) })
+  let saved = [...rez.favoriteRecipes]
+  console.log(rez)
+  if (saved.length) {
     console.log(saved)
     const savedRecipes = await Promise.all(
       saved.map(async (recipe) => {
@@ -313,6 +305,7 @@ app.get('/savedRecipe/:id', async (req, res) => {
           .collection('Recepti')
           .find({ _id: mongo.ObjectId(recipe) })
           .toArray()
+        console.log('-----------------------------------------------', k)
         if (k[0].rating.length)
           k[0].rating =
             k[0].rating.reduce((sum, value) => {
@@ -516,14 +509,15 @@ app.patch('/hej/:id', async (req, res) => {
       { $push: { rating: data.newRating } }
     ) */
   /* console.log(result) */
-  let rated = await db.collection('Favoriti').updateMany(
-    {
-      favoriteRecipes: id,
-    },
-
+  let rated = await db.collection('Komentari').updateMany(
+    { komentari: { $elemMatch: { user: id } } },
     {
       $pull: {
-        favoriteRecipes: id,
+        komentari: {
+          user: id,
+          com: { $exists: true },
+          date: { $exists: true },
+        },
       },
     }
   )
@@ -541,9 +535,32 @@ app.get('/hello/:id', async (req, res) => {
   let id = req.params.id
   console.log(id)
   let col = await db
-    .collection('Favoriti')
-    .find({ favoriteRecipes: id })
+    .collection('Komentari')
+    .find({
+      komentari: { $elemMatch: { user: id } },
+    })
     .toArray()
   console.log(col)
+  res.send(col)
+})
+app.delete('/user/:id/delete', async (req, res) => {
+  let db = await connect()
+  let id = req.params.id
+  console.log(id)
+  let col = await db.collection('users').deleteOne({ username: id })
+  console.log(col)
+  let rated = await db.collection('Komentari').updateMany(
+    { komentari: { $elemMatch: { user: id } } },
+    {
+      $pull: {
+        komentari: {
+          user: id,
+          com: { $exists: true },
+          date: { $exists: true },
+        },
+      },
+    }
+  )
+  console.log(rated)
   res.send(col)
 })

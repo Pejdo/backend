@@ -18,7 +18,6 @@ export default {
       email: userData.email,
       password: await bcrypt.hash(userData.password, 8),
       date: userData.date,
-      Favorites: [],
     }
     try {
       let result = await db.collection('users').insertOne(doc)
