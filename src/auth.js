@@ -25,10 +25,10 @@ export default {
         //return result.insertedId;
         await db
           .collection('Favoriti')
-          .insertOne({ userId: result.insertedId, favoriteRecipes: [] })
+          .insertOne({ userId: userData.username, favoriteRecipes: [] })
         await db
           .collection('Rated')
-          .insertOne({ userId: result.insertedId, ratedRecipes: [] })
+          .insertOne({ userId: userData.username, ratedRecipes: [] })
         return result
       }
     } catch (e) {
