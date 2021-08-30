@@ -493,6 +493,8 @@ app.delete('/user/:id/delete', async (req, res) => {
   console.log(id)
   let col = await db.collection('users').deleteOne({ username: id })
   console.log(col)
+  let recept = await db.collection('Recepti').deleteOne({ userId: id })
+  let rating = await db.collection('Rated').deleteOne({ userId: id })
   let rated = await db.collection('Komentari').updateMany(
     { komentari: { $elemMatch: { user: id } } },
     {
