@@ -4,6 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+"build": "babel src -d build", 
+ "start": "node build/index.js", 
     "serve": "nodemon --exec babel-node src/index.js"
   },
   "author": "",
@@ -17,8 +19,10 @@
     "mongodb": "^3.6.11"
   },
   "devDependencies": {
+    "@babel/cli": "^7.14.8",
     "@babel/core": "^7.15.0",
     "@babel/node": "^7.14.9",
+    "@babel/plugin-transform-runtime": "^7.15.0",
     "@babel/preset-env": "^7.15.0",
     "nodemon": "^2.0.12"
   }
