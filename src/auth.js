@@ -29,7 +29,7 @@ export default {
         await db
           .collection('Rated')
           .insertOne({ userId: result.insertedId, ratedRecipes: [] })
-        return userData
+        return result
       }
     } catch (e) {
       if (e.name == 'MongoError' && e.code == 11000)

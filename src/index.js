@@ -12,21 +12,26 @@ const port = 3000
 app.use(cors())
 app.use(express.json())
 //sve recepti i search
-app.get('/', async (req, res) => {
+app.get('/:page', async (req, res) => {
   let db = await connect()
+  let data = req.params.page
+  console.log('ovo je data iz get' + data)
   let query = req.query
   let querySearch = {}
   if (query.naziv) querySearch.naziv = new RegExp(query.naziv)
 
-  let cursor = await db.collection('Recepti').find(querySearch)
+  let cursor = await db
+    .collection('Recepti')
+    .find(querySearch, { skip: Number(data), limit: 10 })
   let results = await cursor.toArray()
   results.forEach((value) => {
     console.log(value.rating)
     if (value.rating.length)
-      value.rating =
+      value.rating = (
         value.rating.reduce((sum, index) => {
           return (sum += index)
         }) / value.rating.length
+      ).toFixed(1)
   })
   console.log(querySearch)
   res.json(results)
@@ -38,8 +43,9 @@ app.get('/recepti/:id', async (req, res) => {
 
   let doc = await db.collection('Recepti').findOne({ _id: mongo.ObjectId(id) })
   if (doc.rating.length)
-    doc.rating =
+    doc.rating = (
       doc.rating.reduce((sum, index) => (sum += index)) / doc.rating.length
+    ).toFixed(1)
   res.json(doc)
 })
 app.get('/userdata/:username', async (req, res) => {
@@ -68,22 +74,14 @@ app.get('/useracc/:id', async (req, res) => {
   console.log(results)
   res.json(results)
 })
-/* app.get("/", (req, res) => {
-  let title = req.query.title;
-  let recepti = recepto;
-  console.log("ovo je title", title);
-  if (title) {
-    recepti = recepti.filter((elem) => elem.naziv.indexOf(title) >= 0);
-  }
-  res.json(recepti); // i dalje vraćamo sve za sada...
-}); */
 app.post('/user', async (req, res) => {
   let user = req.body
   let id
   try {
     id = await auth.registerUser(user)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    console.log(e)
+    res.status(500).send({ error: e.message })
   }
   res.json({ id: id })
 })
@@ -140,8 +138,9 @@ app.patch('/useracc', [auth.verify], async (req, res) => {
   }
 })
 //jwt
-app.get('/useracc', [auth.verify], (req, res) => {
+app.get('/useracc', (req, res) => {
   let userDetails = req.jwt
+  console.log('ovoso asdoua diu ad aid b', userDetails)
   res.send(userDetails)
 }),
   app.get('/tajna', [auth.verify], (req, res) => {
@@ -203,7 +202,7 @@ app.delete('/recept/:id', [auth.verify], async (req, res) => {
   res.json(komentari)
 })
 //sortiranje po receptu
-app.get('/kategorije', async (req, res) => {
+app.get('/kategorije/recepti', async (req, res) => {
   let db = await connect()
   let query = req.query
   console.log(query)
@@ -211,7 +210,7 @@ app.get('/kategorije', async (req, res) => {
   if (query._any) {
     // za upit: /posts?_all=pojam1 pojam2
     let pretraga = query._any
-    console.log(pretraga)
+    console.log('pretraga ', pretraga)
     let terms = pretraga.split(' ')
 
     /* let atributi = ['sastojci', 'cookTime'] */
@@ -234,27 +233,33 @@ app.get('/kategorije', async (req, res) => {
   }
   console.log(selekcije)
   let doc = await db.collection('Recepti').find(selekcije)
-  let rez = await doc.toArray()
-  res.json(rez)
+  let results = await doc.toArray()
+  results.forEach((value) => {
+    console.log(value.rating)
+    if (value.rating.length)
+      value.rating = (
+        value.rating.reduce((sum, index) => {
+          return (sum += index)
+        }) / value.rating.length
+      ).toFixed(1)
+  })
+  res.json(results)
 })
 //ref za favorite recepte i korisnika
 app.patch('/favoriti/:id', [auth.verify], async (req, res) => {
   console.log(req.params.id)
   let data = req.body
   console.log(data)
-  console.log(mongo.ObjectId(data.id))
 
-  let userID = data.id
+  let userID = data.userId
   let db = await connect()
-  let user = await db.collection('users')
   let answere = await db
     .collection('Favoriti')
     .findOneAndUpdate(
-      { userId: mongo.ObjectId(data.id) },
+      { userId: data.id },
       { $push: { favoriteRecipes: req.params.id } },
       { returnNewDocument: true }
     )
-  console.log('ovo je vali2 ' + answere.value._id)
   res.json(answere)
 })
 
@@ -287,14 +292,10 @@ app.get('/komentari/:id', async (req, res) => {
 })
 
 //favoriti
-app.get('/savedRecipe/:id', [auth.verify], async (req, res) => {
+app.get('/savedRecipe/:id', async (req, res) => {
   let db = await connect()
-  /*  let data = await db
-    .collection('users')
-    .findOne({ _id: mongo.ObjectId(req.params.id) }) */
-  let rez = await db
-    .collection('Favoriti')
-    .findOne({ userId: mongo.ObjectId(req.params.id) })
+  console.log('favoriti', req.params.id)
+  let rez = await db.collection('Favoriti').findOne({ userId: req.params.id })
   let saved = [...rez.favoriteRecipes]
   console.log(rez)
   if (saved.length) {
@@ -305,12 +306,12 @@ app.get('/savedRecipe/:id', [auth.verify], async (req, res) => {
           .collection('Recepti')
           .find({ _id: mongo.ObjectId(recipe) })
           .toArray()
-        console.log('-----------------------------------------------', k)
         if (k[0].rating.length)
-          k[0].rating =
+          k[0].rating = (
             k[0].rating.reduce((sum, value) => {
               return (sum += value)
             }) / k[0].rating.length
+          ).toFixed(1)
         return k
       })
     )
@@ -323,7 +324,7 @@ app.patch('/recepti/removeFavorit/:id', [auth.verify], async (req, res) => {
   const favoriti = await db
     .collection('Favoriti')
     .updateOne(
-      { userId: mongo.ObjectId(req.body.id) },
+      { userId: req.body.id },
       { $pull: { favoriteRecipes: req.params.id } }
     )
 
@@ -333,16 +334,14 @@ app.patch('/recepti/removeFavorit/:id', [auth.verify], async (req, res) => {
 // za favorite
 app.get('/ratedRecipe/:id', [auth.verify], async (req, res) => {
   let db = await connect()
-  let data = await db
+  /*   let data = await db
     .collection('users')
-    .findOne({ _id: mongo.ObjectId(req.params.id) })
-  if (data.Favorites.length) {
-    console.log('favorit', data.Favorites)
-    let rez = await db
-      .collection('Favoriti')
-      .findOne({ _id: mongo.ObjectId(data.Favorites[0]) })
-    let saved = [...rez.favoriteRecipes]
-
+    .findOne({ _id: mongo.ObjectId(req.params.id) }) */
+  /*  if (data.Favorites.length) {
+    console.log('favorit', data.Favorites) */
+  let rez = await db.collection('Favoriti').findOne({ userId: req.params.id })
+  let saved = [...rez.favoriteRecipes]
+  if (saved.length) {
     console.log(saved)
     const savedRecipes = await Promise.all(
       saved.map(async (recipe) => {
@@ -351,10 +350,11 @@ app.get('/ratedRecipe/:id', [auth.verify], async (req, res) => {
           .find({ _id: mongo.ObjectId(recipe) })
           .toArray()
         if (k[0].rating.length)
-          k[0].rating =
+          k[0].rating = (
             k[0].rating.reduce((sum, value) => {
               return (sum += value)
             }) / k[0].rating.length
+          ).toFixed(1)
         return k
       })
     )
@@ -377,7 +377,7 @@ app.patch('/recepti/:id', [auth.verify], async (req, res) => {
     )
   let rated = await db.collection('Rated').findOneAndUpdate(
     {
-      userId: mongo.ObjectId(data.userId),
+      userId: data.userId,
     },
     { $push: { ratedRecipes: { recipe: id, rating: data.rating } } }
   )
@@ -391,14 +391,9 @@ app.get('/recepti/:id/get', async (req, res) => {
   let id = req.params.id
   let data = req.body
   console.log(data)
-  /*  let result = await db
-    .collection('Recepti')
-    .findOneAndUpdate(
-      { _id: mongo.ObjectId(id) },
-      { $pull: { rating: data.rating } }
-    ) */
+
   let rated = await db.collection('Rated').findOne({
-    userId: mongo.ObjectId(data.userId),
+    userId: data.userId,
     ratedRecipes: { $elemMatch: { recipe: id /* , rating: data.rating  */ } },
   })
   console.log(rated)
@@ -411,7 +406,7 @@ app.get('/recepti/:id/getall', [auth.verify], async (req, res) => {
   let id = req.params.id
   console.log(id)
   let rated = await db.collection('Rated').findOne({
-    userId: mongo.ObjectId(id),
+    userId: id,
   })
   let saved = rated.ratedRecipes
   if (saved.length) {
@@ -422,17 +417,14 @@ app.get('/recepti/:id/getall', [auth.verify], async (req, res) => {
           .find({ _id: mongo.ObjectId(recipe.recipe) })
           .toArray()
         if (k[0].rating.length)
-          k[0].rating =
+          k[0].rating = (
             k[0].rating.reduce((sum, value) => {
               return (sum += value)
             }) / k[0].rating.length
+          ).toFixed(1)
         k[0].rated = recipe.rating
         return k
       })
-    )
-    console.log(
-      '-------------------------------ovo je savedqwr  qw .....................................' +
-        savedRecipes
     )
     res.json(savedRecipes)
   } else res.json({ nema: 'nema spremljenih recepata' })
@@ -452,7 +444,7 @@ app.patch('/recepti/:id/remove', [auth.verify], async (req, res) => {
     )
   let rated = await db.collection('Rated').findOneAndUpdate(
     {
-      userId: mongo.ObjectId(data.userId),
+      userId: data.userId,
     },
     { $pull: { ratedRecipes: { recipe: id, rating: data.rating } } }
   )
@@ -480,69 +472,21 @@ app.patch('/recepti/:id/change', [auth.verify], async (req, res) => {
   console.log(result)
   await db.collection('Rated').findOneAndUpdate(
     {
-      userId: mongo.ObjectId(data.userId),
+      userId: data.userId,
       ratedRecipes: { $elemMatch: { recipe: id } },
     },
     { $pull: { ratedRecipes: { recipe: id, rating: data.rating } } }
   )
   let rated = await db.collection('Rated').findOneAndUpdate(
     {
-      userId: mongo.ObjectId(data.userId),
+      userId: data.userId,
     },
     { $push: { ratedRecipes: { recipe: id, rating: data.newRating } } }
   )
   console.log(rated)
   res.json(rated)
 })
-app.patch('/hej/:id', async (req, res) => {
-  let db = await connect()
-  let id = req.params.id
-  let data = req.body
-  console.log(id)
-  /*   let result = await db
-    .collection('Recepti')
-    .findOneAndUpdate({ _id: mongo.ObjectId(id) }, { $pull: { rating: 0 } }) */
-  /*  let result = await db
-    .collection('Recepti')
-    .findOneAndUpdate(
-      { _id: mongo.ObjectId(id) },
-      { $push: { rating: data.newRating } }
-    ) */
-  /* console.log(result) */
-  let rated = await db.collection('Komentari').updateMany(
-    { komentari: { $elemMatch: { user: id } } },
-    {
-      $pull: {
-        komentari: {
-          user: id,
-          com: { $exists: true },
-          date: { $exists: true },
-        },
-      },
-    }
-  )
-  /*  let rated = await db.collection('Rated').findOneAndUpdate(
-    {
-      userId: mongo.ObjectId(data.userId),
-    },
-    { $push: { ratedRecipes: { recipe: id, rating: data.newRating } } }
-  ) */
-  console.log(rated)
-  res.json(rated)
-})
-app.get('/hello/:id', async (req, res) => {
-  let db = await connect()
-  let id = req.params.id
-  console.log(id)
-  let col = await db
-    .collection('Komentari')
-    .find({
-      komentari: { $elemMatch: { user: id } },
-    })
-    .toArray()
-  console.log(col)
-  res.send(col)
-})
+
 app.delete('/user/:id/delete', async (req, res) => {
   let db = await connect()
   let id = req.params.id
